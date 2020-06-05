@@ -17,7 +17,7 @@
         <ul style="list-style-type:square">
             <li>Status - Basic status indicator, On/Off. Also has icon for Kodi Remote popup</li>
             <li>Volume - Icon mutes/unmutes, slider shows/sets volume</li>
-            <li>Source - Selector switch for content source: Video, Music, TV Shows, Live TV, Photos, Weather</li>
+            <li>Source - Selector switch for content source: Movies, Music, TV Shows, Videos, Live TV, Photos, Weather</li>
             <li>Playing - Icon Pauses/Resumes, slider shows/sets percentage through media</li>
         </ul>
     </description>
@@ -99,7 +99,7 @@ class BasePlugin:
         if (len(Devices) == 0):
             Domoticz.Device(Name="Status",  Unit=1, Type=17,  Switchtype=17).Create()
             Options = {"LevelActions": "||||", 
-                       "LevelNames": "Off|Video|Music|TV Shows|Live TV|Pictures|Weather",
+                       "LevelNames": "Off|Movies|Tv Shows|Music|Videos|Pictures|Weather|Live TV",
                        "LevelOffHidden": "false",
                        "SelectorStyle": "1"}
             Domoticz.Device(Name="Source",  Unit=2, TypeName="Selector Switch", Switchtype=18, Image=12, Options=Options).Create()
@@ -145,6 +145,7 @@ class BasePlugin:
         return True
 
     def onMessage(self, Connection, Response):
+        DumpJSONResponseToLog(Response)
         if ('error' in Response):
             # Kodi has signalled and error
             if (Response["id"] == 1010):
@@ -245,24 +246,27 @@ class BasePlugin:
                     self.mediaLevel = 0
                     if ("type" in Response["result"]["item"]):
                         mediaType = Response["result"]["item"]["type"]
-                    if (mediaType == "song"):
-                        self.playerState = 5
-                        self.mediaLevel = 20
-                    elif (mediaType == "movie"):
-                        self.playerState = 4
-                        self.mediaLevel = 10
-                    elif (mediaType == "unknown"):
+                    if (mediaType == "movie"):
                         self.playerState = 4
                         self.mediaLevel = 10
                     elif (mediaType == "episode"):
                         self.playerState = 4
+                        self.mediaLevel = 20
+                    elif (mediaType == "song"):
+                        self.playerState = 5
                         self.mediaLevel = 30
-                    elif (mediaType == "channel"):
+                    elif (mediaType == "video"):
                         self.playerState = 4
                         self.mediaLevel = 40
+                    elif (mediaType == "unknown"):
+                        self.playerState = 4
+                        self.mediaLevel = 10
                     elif (mediaType == "picture"):
                         self.playerState = 6
                         self.mediaLevel = 50
+                    elif (mediaType == "channel"):
+                        self.playerState = 4
+                        self.mediaLevel = 70
                     else:
                         Domoticz.Error( "Unknown media type encountered: "+str(mediaType))
                         self.playerState = 9
@@ -396,13 +400,16 @@ class BasePlugin:
                 if (params.capitalize() == 'Level') or (Command.lower() == 'Volume'):
                     if (Unit == 2):  # Source selector
                         self.mediaLevel = Level
-                        # valid windows name list http://kodi.wiki/view/JSON-RPC_API/v8#GUI.Window
-                        if (self.mediaLevel == 10): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"videos"}}')
-                        if (self.mediaLevel == 20): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"music"}}')
-                        if (self.mediaLevel == 30): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"tvrecordings"}}')
-                        if (self.mediaLevel == 40): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"pvr"}}')
+                        # valid windows name list http://kodi.wiki/view/JSON-RPC_API/v10#GUI.Window
+                        # parameters: https://kodi.wiki/view/Opening_Windows_and_Dialogs
+                        if (self.mediaLevel == 0): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"home"}}')
+                        if (self.mediaLevel == 10): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"videos","parameters":["videodb://movies/titles"]}}')
+                        if (self.mediaLevel == 20): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"videos","parameters":["videodb://tvshows/titles/"]}}')
+                        if (self.mediaLevel == 30): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"music"}}')
+                        if (self.mediaLevel == 40): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"videos","parameters":["sources://video/"]}}')
                         if (self.mediaLevel == 50): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"pictures"}}')
                         if (self.mediaLevel == 60): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"weather"}}')
+                        if (self.mediaLevel == 70): self.KodiConn.Send('{"jsonrpc":"2.0","method":"GUI.ActivateWindow","params":{"window":"tvchannels"}}')
                         TimedOut = 0
                         for Device in Devices:
                             TimedOut = Devices[Device].TimedOut
@@ -694,7 +701,7 @@ def UpdateDevice(Unit, nValue, sValue, TimedOut):
     if (Unit in Devices):
         if (Devices[Unit].nValue != nValue) or (Devices[Unit].sValue != sValue) or (Devices[Unit].TimedOut != TimedOut):
             Devices[Unit].Update(nValue=nValue, sValue=str(sValue), TimedOut=TimedOut)
-            Domoticz.Log("Update "+str(nValue)+":'"+str(sValue)+"' ("+Devices[Unit].Name+")")
+            Domoticz.Log("Update unit "+str(Unit)+" ("+Devices[Unit].Name+") with nValue:"+str(nValue)+", sValue:'"+str(sValue)+"'")
     return
 
 # Synchronise images to match parameter in hardware page
